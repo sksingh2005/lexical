@@ -1097,6 +1097,58 @@ describe('Markdown', () => {
     ).toBe('lorem *ipsum*');
   });
 
+  it('puts enter-triggered markdown shortcut transforms in a separate undo step', async () => {
+    const editor = createHeadlessEditor({
+      nodes: [CodeNode],
+    });
+    const historyState = createEmptyHistoryState();
+
+    registerHistory(editor, historyState, 1000);
+    registerMarkdownShortcuts(editor, [CODE]);
+
+    await editor.update(
+      () => {
+        const root = $getRoot();
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+        paragraph.selectEnd();
+
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          selection.insertText('```javascript');
+        }
+      },
+      {
+        discrete: true,
+      },
+    );
+
+    expect(
+      editor.getEditorState().read(() => $getRoot().getTextContent()),
+    ).toBe('```javascript');
+
+    await editor.update(
+      () => {
+        editor.dispatchCommand(KEY_ENTER_COMMAND, null);
+      },
+      {
+        discrete: true,
+      },
+    );
+
+    expect(editor.read(() => $generateHtmlFromNodes(editor))).toBe(
+      '<pre spellcheck="false" data-language="javascript"></pre>',
+    );
+
+    await editor.update(() => {
+      editor.dispatchCommand(UNDO_COMMAND, undefined);
+    });
+
+    expect(
+      editor.getEditorState().read(() => $getRoot().getTextContent()),
+    ).toBe('```javascript');
+  });
+
   it('can round-trip nested fenced code blocks (4 backticks wrapping 3 backticks)', () => {
     const markdown =
       '````markdown\n' +

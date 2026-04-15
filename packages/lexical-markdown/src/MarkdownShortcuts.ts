@@ -585,6 +585,7 @@ export function registerMarkdownShortcuts(
             true,
           )
         ) {
+          $addUpdateTag(HISTORY_PUSH_TAG);
           if (event !== null) {
             event.preventDefault();
           }
