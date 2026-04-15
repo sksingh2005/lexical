@@ -8,6 +8,7 @@
 
 import {$createCodeNode, CodeNode} from '@lexical/code-core';
 import {createHeadlessEditor} from '@lexical/headless';
+import {createEmptyHistoryState, registerHistory} from '@lexical/history';
 import {$generateHtmlFromNodes, $generateNodesFromDOM} from '@lexical/html';
 import {$createLinkNode, LinkNode} from '@lexical/link';
 import {
@@ -27,6 +28,7 @@ import {
   $isRangeSelection,
   $setState,
   KEY_ENTER_COMMAND,
+  UNDO_COMMAND,
 } from 'lexical';
 import {describe, expect, it} from 'vitest';
 
@@ -43,6 +45,7 @@ import {
   CODE,
   ElementTransformer,
   HEADING,
+  ITALIC_STAR,
   listMarkerState,
   MultilineElementTransformer,
   normalizeMarkdown,
@@ -1039,6 +1042,59 @@ describe('Markdown', () => {
     expect(editor.read(() => $generateHtmlFromNodes(editor))).toBe(
       '<h1><br></h1>',
     );
+  });
+
+  it('puts markdown shortcut transforms in a separate undo step', async () => {
+    const editor = createHeadlessEditor();
+    const historyState = createEmptyHistoryState();
+
+    registerHistory(editor, historyState, 1000);
+    registerMarkdownShortcuts(editor, [ITALIC_STAR]);
+
+    await editor.update(
+      () => {
+        const root = $getRoot();
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+        paragraph.selectEnd();
+
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          selection.insertText('lorem *ipsum');
+        }
+      },
+      {
+        discrete: true,
+      },
+    );
+
+    expect(
+      editor.getEditorState().read(() => $getRoot().getTextContent()),
+    ).toBe('lorem *ipsum');
+
+    await editor.update(
+      () => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          selection.insertText('*');
+        }
+      },
+      {
+        discrete: true,
+      },
+    );
+
+    expect(
+      editor.getEditorState().read(() => $getRoot().getTextContent()),
+    ).toBe('lorem ipsum');
+
+    await editor.update(() => {
+      editor.dispatchCommand(UNDO_COMMAND, undefined);
+    });
+
+    expect(
+      editor.getEditorState().read(() => $getRoot().getTextContent()),
+    ).toBe('lorem *ipsum*');
   });
 
   it('can round-trip nested fenced code blocks (4 backticks wrapping 3 backticks)', () => {
